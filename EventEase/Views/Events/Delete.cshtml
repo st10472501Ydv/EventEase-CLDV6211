@@ -1,0 +1,17 @@
+@model EventEase.Models.Event
+<h1>Delete</h1>
+<h3>Are you sure?</h3>
+<div>
+    <h4>@Model.Name</h4>
+    <p>Start: @Model.StartDate.ToString("g")</p>
+    <p>End: @Model.EndDate.ToString("g")</p>
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger">@TempData["Error"]</div>
+    }
+    <form asp-action="Delete">
+        <input type="hidden" asp-for="EventId" />
+        <input type="submit" value="Delete" class="btn btn-danger" /> |
+        <a asp-action="Index">Back</a>
+    </form>
+</div>

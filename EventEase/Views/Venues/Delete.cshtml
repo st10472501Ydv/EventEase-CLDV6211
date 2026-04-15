@@ -1,0 +1,17 @@
+﻿@model EventEase.Models.Venue
+<h1>Delete</h1>
+<h3>Are you sure?</h3>
+<div>
+    <h4>@Model.Name</h4>
+    <p>Location: @Model.Location</p>
+    <p>Capacity: @Model.Capacity</p>
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger">@TempData["Error"]</div>
+    }
+    <form asp-action="Delete">
+        <input type="hidden" asp-for="VenueId" />
+        <input type="submit" value="Delete" class="btn btn-danger" /> |
+        <a asp-action="Index">Back</a>
+    </form>
+</div>

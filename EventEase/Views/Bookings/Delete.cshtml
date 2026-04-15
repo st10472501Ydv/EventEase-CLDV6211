@@ -1,0 +1,14 @@
+@model EventEase.Models.Booking
+<h1>Delete</h1>
+<h3>Are you sure?</h3>
+<div>
+    <h4>Booking #@Model.BookingId</h4>
+    <p>Venue: @Model.Venue?.Name</p>
+    <p>Event: @Model.Event?.Name</p>
+    <p>Booking Date: @Model.BookingDate.ToString("g")</p>
+    <form asp-action="Delete">
+        <input type="hidden" asp-for="BookingId" />
+        <input type="submit" value="Delete" class="btn btn-danger" /> |
+        <a asp-action="Index">Back</a>
+    </form>
+</div>

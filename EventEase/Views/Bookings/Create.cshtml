@@ -1,0 +1,31 @@
+﻿@model EventEase.Models.Booking
+<h1>Create Booking</h1>
+@if (TempData["CreateErrors"] != null)
+{
+    <div class="alert alert-danger">@TempData["CreateErrors"]</div>
+}
+<form asp-action="Create" method="post">
+    @Html.AntiForgeryToken()
+    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+    <div class="form-group">
+        <label asp-for="VenueId" class="control-label">Venue</label>
+        <select asp-for="VenueId" class="form-control" asp-items="ViewBag.VenueId">
+            <option value="">-- Select Venue --</option>
+        </select>
+        <span asp-validation-for="VenueId" class="text-danger"></span>
+    </div>
+    <div class="form-group">
+        <label asp-for="EventId" class="control-label">Event</label>
+        <select asp-for="EventId" class="form-control" asp-items="ViewBag.EventId">
+            <option value="">-- Select Event --</option>
+        </select>
+        <span asp-validation-for="EventId" class="text-danger"></span>
+    </div>
+    <div class="form-group">
+
+        <label asp-for="Notes"></label>
+        <textarea asp-for="Notes" class="form-control"></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">Create</button>
+</form>
+<div><a asp-action="Index">Back to List</a></div>
