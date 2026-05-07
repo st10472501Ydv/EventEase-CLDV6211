@@ -9,133 +9,128 @@ namespace EventEase.Controllers
     public class BookingsController : Controller
     {
         private readonly ApplicationDbContext _context;
-        private readonly ILogger<BookingsController> _logger;
 
-        public BookingsController(ApplicationDbContext context, ILogger<BookingsController> logger)
+        public BookingsController(ApplicationDbContext context)
         {
             _context = context;
-            _logger = logger;
         }
 
-        public async Task<IActionResult> Index()
+        // GET: Bookings – with search and consolidated display
+        public async Task<IActionResult> Index(string searchString)
         {
-            var bookings = await _context.Bookings.Include(b => b.Venue).Include(b => b.Event).ToListAsync();
-            return View(bookings);
+            var bookings = _context.Bookings
+                .Include(b => b.Venue)
+                .Include(b => b.Event)
+                .AsQueryable();
+
+            if (!string.IsNullOrEmpty(searchString))
+            {
+                bookings = bookings.Where(b =>
+                    b.Venue.Name.Contains(searchString) ||
+                    b.Event.Name.Contains(searchString) ||
+                    b.Status.Contains(searchString) ||
+                    b.BookingId.ToString().Contains(searchString));  // partial match on booking ID
+            }
+
+            ViewData["CurrentFilter"] = searchString;
+            return View(await bookings.ToListAsync());
         }
 
-        public async Task<IActionResult> Create()
+        // GET: Bookings/Create
+        public IActionResult Create()
         {
-            var venues = await _context.Venues.Select(v => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem { Value = v.VenueId.ToString(), Text = v.Name }).ToListAsync();
-            var events = await _context.Events.Select(e => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem { Value = e.EventId.ToString(), Text = e.Name }).ToListAsync();
-            ViewData["VenueId"] = venues;
-            ViewData["EventId"] = events;
+            ViewData["VenueId"] = new SelectList(_context.Venues, "VenueId", "Name");
+            ViewData["EventId"] = new SelectList(_context.Events, "EventId", "Name");
             return View();
         }
 
+        // POST: Bookings/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("VenueId,EventId,Notes")] Booking booking)
+        public async Task<IActionResult> Create([Bind("BookingId,VenueId,EventId,BookingDate,Status,Notes")] Booking booking)
         {
-            // Validate selections
-            if (booking.VenueId <= 0)
+            if (!ModelState.IsValid)
             {
-                ModelState.AddModelError("VenueId", "Please select a venue.");
-            }
-            if (booking.EventId <= 0)
-            {
-                ModelState.AddModelError("EventId", "Please select an event.");
+                ViewData["VenueId"] = new SelectList(_context.Venues, "VenueId", "Name", booking.VenueId);
+                ViewData["EventId"] = new SelectList(_context.Events, "EventId", "Name", booking.EventId);
+                return View(booking);
             }
 
-            // Log incoming values to help debug form-post issues
-            _logger.LogDebug("Create Booking POST: VenueId={VenueId}, EventId={EventId}, Notes={Notes}", booking.VenueId, booking.EventId, booking.Notes);
-            // Log raw form values
-            try
+            // 1. Check that the selected event exists
+            var selectedEvent = await _context.Events.FindAsync(booking.EventId);
+            if (selectedEvent == null)
             {
-                var formEntries = Request.Form.Select(kv => $"{kv.Key}={kv.Value}");
-                _logger.LogDebug("Request.Form entries: {FormEntries}", string.Join(";", formEntries));
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to read Request.Form");
+                ModelState.AddModelError("EventId", "The selected event does not exist.");
+                ViewData["VenueId"] = new SelectList(_context.Venues, "VenueId", "Name", booking.VenueId);
+                ViewData["EventId"] = new SelectList(_context.Events, "EventId", "Name", booking.EventId);
+                return View(booking);
             }
 
-            // Only proceed with event-specific checks when a valid event id is supplied
-            Event? evt = null;
-            if (booking.EventId > 0)
+            // 2. One event → one booking rule
+            bool eventAlreadyBooked = await _context.Bookings.AnyAsync(b => b.EventId == booking.EventId);
+            if (eventAlreadyBooked)
             {
-                evt = await _context.Events.FindAsync(booking.EventId);
-                if (evt == null)
-                {
-                    ModelState.AddModelError("EventId", "Selected event not found.");
-                }
+                ModelState.AddModelError("EventId", $"The event '{selectedEvent.Name}' is already booked. Each event can only be booked once.");
+                ViewData["VenueId"] = new SelectList(_context.Venues, "VenueId", "Name", booking.VenueId);
+                ViewData["EventId"] = new SelectList(_context.Events, "EventId", "Name", booking.EventId);
+                return View(booking);
             }
 
-            // Check if event already booked
-            if (booking.EventId > 0 && await _context.Bookings.AnyAsync(b => b.EventId == booking.EventId))
+            // 3. Double‑booking: same venue with overlapping date/time
+            var conflictingBookings = await _context.Bookings
+                .Include(b => b.Event)
+                .Where(b => b.VenueId == booking.VenueId)
+                .Where(b => b.Event.StartDate < selectedEvent.EndDate && b.Event.EndDate > selectedEvent.StartDate)
+                .ToListAsync();
+
+            if (conflictingBookings.Any())
             {
-                ModelState.AddModelError("EventId", "This event is already booked to a venue.");
+                ModelState.AddModelError("VenueId", $"The venue is already booked for an event that overlaps with '{selectedEvent.Name}'. Please choose a different venue or change the event dates.");
+                ViewData["VenueId"] = new SelectList(_context.Venues, "VenueId", "Name", booking.VenueId);
+                ViewData["EventId"] = new SelectList(_context.Events, "EventId", "Name", booking.EventId);
+                return View(booking);
             }
 
-            // Check for venue double-booking when event exists
-            if (evt != null)
-            {
-                var conflict = await _context.Bookings
-                    .Include(b => b.Event)
-                    .Where(b => b.VenueId == booking.VenueId && b.EventId != booking.EventId)
-                    .Where(b => (evt.StartDate < b.Event.EndDate && evt.EndDate > b.Event.StartDate))
-                    .FirstOrDefaultAsync();
-
-                if (conflict != null)
-                {
-                    ModelState.AddModelError("VenueId", "This venue is already booked for these dates.");
-                }
-            }
-
-            // Log ModelState errors for debugging
-            foreach (var kv in ModelState)
-            {
-                var errs = string.Join(";", kv.Value.Errors.Select(e => e.ErrorMessage));
-                if (!string.IsNullOrEmpty(errs)) _logger.LogDebug("ModelState[{Key}] = {Errors}", kv.Key, errs);
-            }
-
-            if (ModelState.IsValid)
-            {
-                booking.BookingDate = DateTime.Now;
-                booking.Status = "Confirmed";
-                _context.Add(booking);
-                await _context.SaveChangesAsync();
-                return RedirectToAction(nameof(Index));
-            }
-            // Collect model state errors for debugging/helpful feedback
-            var errors = string.Join(" | ", ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage));
-            if (!string.IsNullOrEmpty(errors)) TempData["CreateErrors"] = errors;
-
-            var venues = await _context.Venues.Select(v => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem { Value = v.VenueId.ToString(), Text = v.Name, Selected = v.VenueId == booking.VenueId }).ToListAsync();
-            var events = await _context.Events.Select(e => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem { Value = e.EventId.ToString(), Text = e.Name, Selected = e.EventId == booking.EventId }).ToListAsync();
-            ViewData["VenueId"] = venues;
-            ViewData["EventId"] = events;
-            return View(booking);
+            // 4. All good
+            _context.Add(booking);
+            await _context.SaveChangesAsync();
+            TempData["Success"] = "Booking created successfully.";
+            return RedirectToAction(nameof(Index));
         }
 
+        // GET: Bookings/Details/5
         public async Task<IActionResult> Details(int? id)
         {
             if (id == null) return NotFound();
-            var booking = await _context.Bookings.Include(b => b.Venue).Include(b => b.Event)
+
+            var booking = await _context.Bookings
+                .Include(b => b.Venue)
+                .Include(b => b.Event)
                 .FirstOrDefaultAsync(m => m.BookingId == id);
+
             if (booking == null) return NotFound();
+
             return View(booking);
         }
 
+        // GET: Bookings/Delete/5
         public async Task<IActionResult> Delete(int? id)
         {
             if (id == null) return NotFound();
-            var booking = await _context.Bookings.Include(b => b.Venue).Include(b => b.Event)
+
+            var booking = await _context.Bookings
+                .Include(b => b.Venue)
+                .Include(b => b.Event)
                 .FirstOrDefaultAsync(m => m.BookingId == id);
+
             if (booking == null) return NotFound();
+
             return View(booking);
         }
 
+        // POST: Bookings/Delete/5
         [HttpPost, ActionName("Delete")]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var booking = await _context.Bookings.FindAsync(id);

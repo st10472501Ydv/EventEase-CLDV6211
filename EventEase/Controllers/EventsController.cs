@@ -14,82 +14,153 @@ namespace EventEase.Controllers
             _context = context;
         }
 
-        public async Task<IActionResult> Index()
+        // GET: Events
+        public async Task<IActionResult> Index(string searchString)
         {
-            return View(await _context.Events.ToListAsync());
+            var events = from e in _context.Events
+                         select e;
+
+            if (!string.IsNullOrEmpty(searchString))
+            {
+                events = events.Where(e => e.Name.Contains(searchString)
+                                        || e.OrganizerName.Contains(searchString));
+            }
+
+            ViewData["CurrentFilter"] = searchString;
+            return View(await events.ToListAsync());
         }
 
+        // GET: Events/Details/5
+        public async Task<IActionResult> Details(int? id)
+        {
+            if (id == null)
+                return NotFound();
+
+            var @event = await _context.Events
+                .FirstOrDefaultAsync(m => m.EventId == id);
+
+            if (@event == null)
+                return NotFound();
+
+            return View(@event);
+        }
+
+        // GET: Events/Create
         public IActionResult Create()
         {
             return View();
         }
 
+        // POST: Events/Create
         [HttpPost]
-        public async Task<IActionResult> Create(Event evt)
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Create([Bind("EventId,Name,Description,StartDate,EndDate,OrganizerName,OrganizerEmail")] Event @event)
         {
             if (ModelState.IsValid)
             {
-                _context.Add(evt);
+                _context.Add(@event);
                 await _context.SaveChangesAsync();
                 return RedirectToAction(nameof(Index));
             }
-            return View(evt);
+            return View(@event);
         }
 
-        public async Task<IActionResult> Details(int? id)
-        {
-            if (id == null) return NotFound();
-            var evt = await _context.Events.FirstOrDefaultAsync(m => m.EventId == id);
-            if (evt == null) return NotFound();
-            return View(evt);
-        }
-
+        // GET: Events/Edit/5
         public async Task<IActionResult> Edit(int? id)
         {
-            if (id == null) return NotFound();
-            var evt = await _context.Events.FindAsync(id);
-            if (evt == null) return NotFound();
-            return View(evt);
+            if (id == null)
+                return NotFound();
+
+            var @event = await _context.Events.FindAsync(id);
+            if (@event == null)
+                return NotFound();
+
+            return View(@event);
         }
 
+        // POST: Events/Edit/5
         [HttpPost]
-        public async Task<IActionResult> Edit(int id, Event evt)
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Edit(int id, [Bind("EventId,Name,Description,StartDate,EndDate,OrganizerName,OrganizerEmail")] Event @event)
         {
-            if (id != evt.EventId) return NotFound();
+            if (id != @event.EventId)
+                return NotFound();
+
             if (ModelState.IsValid)
             {
-                _context.Update(evt);
-                await _context.SaveChangesAsync();
+                try
+                {
+                    _context.Update(@event);
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    if (!EventExists(@event.EventId))
+                        return NotFound();
+                    else
+                        throw;
+                }
                 return RedirectToAction(nameof(Index));
             }
-            return View(evt);
+            return View(@event);
         }
 
+        // GET: Events/Delete/5
         public async Task<IActionResult> Delete(int? id)
         {
-            if (id == null) return NotFound();
-            var evt = await _context.Events.Include(e => e.Booking).FirstOrDefaultAsync(e => e.EventId == id);
-            if (evt == null) return NotFound();
+            if (id == null)
+                return NotFound();
 
-            if (evt.Booking != null)
+            var @event = await _context.Events
+                .Include(e => e.Booking)
+                .FirstOrDefaultAsync(e => e.EventId == id);
+
+            if (@event == null)
+                return NotFound();
+
+            if (@event.Booking != null)
             {
-                TempData["Error"] = "Cannot delete event with existing booking";
+                TempData["Error"] = "Cannot delete this event because it has an existing booking.";
                 return RedirectToAction(nameof(Index));
             }
 
-            return View(evt);
+            return View(@event);
         }
 
+        // POST: Events/Delete/5
         [HttpPost, ActionName("Delete")]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
-            var evt = await _context.Events.FindAsync(id);
-            if (evt != null)
+            var @event = await _context.Events
+                .Include(e => e.Booking)
+                .FirstOrDefaultAsync(e => e.EventId == id);
+
+            if (@event == null)
+                return NotFound();
+
+            if (@event.Booking != null)
             {
-                _context.Events.Remove(evt);
+                TempData["Error"] = "Cannot delete this event because it has an active booking.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            try
+            {
+                _context.Events.Remove(@event);
                 await _context.SaveChangesAsync();
             }
+            catch (DbUpdateException)
+            {
+                TempData["Error"] = "Unable to delete event. It may be in use.";
+            }
+
             return RedirectToAction(nameof(Index));
+        }
+
+        private bool EventExists(int id)
+        {
+            return _context.Events.Any(e => e.EventId == id);
         }
     }
 }

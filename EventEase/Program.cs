@@ -9,7 +9,7 @@ namespace EventEase
         {
             var builder = WebApplication.CreateBuilder(args);
             builder.Services.AddDbContext<ApplicationDbContext>(options => options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
-
+            builder.Services.AddScoped<EventEase.Services.BlobService>();
             // Add services to the container.
             builder.Services.AddControllersWithViews();
 
