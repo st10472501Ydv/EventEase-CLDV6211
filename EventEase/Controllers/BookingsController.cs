@@ -15,24 +15,57 @@ namespace EventEase.Controllers
             _context = context;
         }
 
-        // GET: Bookings – with search and consolidated display
-        public async Task<IActionResult> Index(string searchString)
+        // GET: Bookings – with advanced filtering
+        public async Task<IActionResult> Index(string searchString, int? eventTypeId, DateTime? fromDate, DateTime? toDate, bool availableOnly = false)
         {
             var bookings = _context.Bookings
                 .Include(b => b.Venue)
                 .Include(b => b.Event)
+                    .ThenInclude(e => e.EventType)
                 .AsQueryable();
 
+            // Full-text search (venue name, event name, status, booking ID)
             if (!string.IsNullOrEmpty(searchString))
             {
                 bookings = bookings.Where(b =>
                     b.Venue.Name.Contains(searchString) ||
                     b.Event.Name.Contains(searchString) ||
                     b.Status.Contains(searchString) ||
-                    b.BookingId.ToString().Contains(searchString));  // partial match on booking ID
+                    b.BookingId.ToString().Contains(searchString));
+            }
+
+            // Filter by event type
+            if (eventTypeId.HasValue)
+            {
+                bookings = bookings.Where(b => b.Event.EventTypeId == eventTypeId.Value);
+            }
+
+            // Date range filter (overlaps with event dates)
+            if (fromDate.HasValue && toDate.HasValue)
+            {
+                bookings = bookings.Where(b => b.Event.StartDate >= fromDate && b.Event.EndDate <= toDate);
+            }
+            else if (fromDate.HasValue)
+            {
+                bookings = bookings.Where(b => b.Event.StartDate >= fromDate);
+            }
+            else if (toDate.HasValue)
+            {
+                bookings = bookings.Where(b => b.Event.EndDate <= toDate);
+            }
+
+            // Venue availability filter (only bookings that are not confirmed)
+            if (availableOnly)
+            {
+                bookings = bookings.Where(b => b.Status == "Cancelled");
             }
 
             ViewData["CurrentFilter"] = searchString;
+            ViewData["EventTypeId"] = new SelectList(_context.EventTypes, "EventTypeId", "Name");
+            ViewData["FromDate"] = fromDate?.ToString("yyyy-MM-dd");
+            ViewData["ToDate"] = toDate?.ToString("yyyy-MM-dd");
+            ViewData["AvailableOnly"] = availableOnly;
+
             return View(await bookings.ToListAsync());
         }
 

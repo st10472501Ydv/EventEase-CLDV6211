@@ -17,13 +17,49 @@ namespace EventEase.Controllers
             _blobService = blobService;
         }
 
-        // GET: Venues (with search)
-        public async Task<IActionResult> Index(string searchString)
+        // GET: Venues (with search, date range, and availability filter)
+        public async Task<IActionResult> Index(string searchString, DateTime? fromDate, DateTime? toDate, bool availableOnly = false)
         {
-            var venues = from v in _context.Venues select v;
+            var venues = _context.Venues
+                .Include(v => v.Bookings)
+                    .ThenInclude(b => b.Event)
+                .AsQueryable();
+
             if (!string.IsNullOrEmpty(searchString))
                 venues = venues.Where(v => v.Name.Contains(searchString) || v.Location.Contains(searchString));
+
+            // Date range filter – exclude venues with bookings overlapping the range
+            if (fromDate.HasValue && toDate.HasValue)
+            {
+                venues = venues.Where(v => !v.Bookings.Any(b =>
+                    b.Status == "Confirmed" &&
+                    b.Event.StartDate < toDate.Value &&
+                    b.Event.EndDate > fromDate.Value));
+            }
+            else if (fromDate.HasValue)
+            {
+                venues = venues.Where(v => !v.Bookings.Any(b =>
+                    b.Status == "Confirmed" &&
+                    b.Event.EndDate > fromDate.Value));
+            }
+            else if (toDate.HasValue)
+            {
+                venues = venues.Where(v => !v.Bookings.Any(b =>
+                    b.Status == "Confirmed" &&
+                    b.Event.StartDate < toDate.Value));
+            }
+
+            // Available Only – venues with no confirmed bookings at all
+            if (availableOnly)
+            {
+                venues = venues.Where(v => !v.Bookings.Any(b => b.Status == "Confirmed"));
+            }
+
             ViewData["CurrentFilter"] = searchString;
+            ViewData["FromDate"] = fromDate?.ToString("yyyy-MM-dd");
+            ViewData["ToDate"] = toDate?.ToString("yyyy-MM-dd");
+            ViewData["AvailableOnly"] = availableOnly;
+
             return View(await venues.ToListAsync());
         }
 
@@ -111,7 +147,7 @@ namespace EventEase.Controllers
             return RedirectToAction(nameof(Index));
         }
 
-        // GET: Venues/Delete/5
+        // GET: Venues/Delete/5azu
         public async Task<IActionResult> Delete(int? id)
         {
             if (id == null) return NotFound();

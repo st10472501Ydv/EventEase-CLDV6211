@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using EventEase.Data;
 using EventEase.Models;
@@ -48,13 +49,14 @@ namespace EventEase.Controllers
         // GET: Events/Create
         public IActionResult Create()
         {
+            ViewData["EventTypeId"] = new SelectList(_context.EventTypes, "EventTypeId", "Name");
             return View();
         }
 
         // POST: Events/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("EventId,Name,Description,StartDate,EndDate,OrganizerName,OrganizerEmail")] Event @event)
+        public async Task<IActionResult> Create([Bind("EventId,Name,Description,StartDate,EndDate,OrganizerName,OrganizerEmail,EventTypeId")] Event @event)
         {
             if (ModelState.IsValid)
             {
@@ -62,6 +64,7 @@ namespace EventEase.Controllers
                 await _context.SaveChangesAsync();
                 return RedirectToAction(nameof(Index));
             }
+            ViewData["EventTypeId"] = new SelectList(_context.EventTypes, "EventTypeId", "Name", @event.EventTypeId);
             return View(@event);
         }
 
@@ -75,13 +78,14 @@ namespace EventEase.Controllers
             if (@event == null)
                 return NotFound();
 
+            ViewData["EventTypeId"] = new SelectList(_context.EventTypes, "EventTypeId", "Name", @event.EventTypeId);
             return View(@event);
         }
 
         // POST: Events/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, [Bind("EventId,Name,Description,StartDate,EndDate,OrganizerName,OrganizerEmail")] Event @event)
+        public async Task<IActionResult> Edit(int id, [Bind("EventId,Name,Description,StartDate,EndDate,OrganizerName,OrganizerEmail,EventTypeId")] Event @event)
         {
             if (id != @event.EventId)
                 return NotFound();
@@ -102,6 +106,7 @@ namespace EventEase.Controllers
                 }
                 return RedirectToAction(nameof(Index));
             }
+            ViewData["EventTypeId"] = new SelectList(_context.EventTypes, "EventTypeId", "Name", @event.EventTypeId);
             return View(@event);
         }
 

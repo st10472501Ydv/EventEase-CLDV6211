@@ -23,5 +23,8 @@ namespace EventEase.Models
 
         // Navigation
         public Booking? Booking { get; set; }
+
+        public int? EventTypeId { get; set; } //classify event type
+        public EventType? EventType { get; set; }
     }
 }
