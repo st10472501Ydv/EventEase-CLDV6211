@@ -5,7 +5,21 @@ namespace EventEase.Data
 {
     public class ApplicationDbContext : DbContext
     {
+        // Normal constructor used by dependency injection in the running app
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options) { }
+
+        // Design-time constructor for migrations (only used when running dotnet ef commands)
+        public ApplicationDbContext() : base(GetDesignTimeOptions())
+        {
+        }
+
+        private static DbContextOptions<ApplicationDbContext> GetDesignTimeOptions()
+        {
+            var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
+            // Use your local database for generating migrations
+            optionsBuilder.UseSqlServer("Server=(localdb)\\mssqllocaldb;Database=EventEaseDB;Trusted_Connection=True;TrustServerCertificate=True");
+            return optionsBuilder.Options;
+        }
 
         public DbSet<Venue> Venues { get; set; }
         public DbSet<Event> Events { get; set; }
