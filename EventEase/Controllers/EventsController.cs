@@ -18,8 +18,9 @@ namespace EventEase.Controllers
         // GET: Events
         public async Task<IActionResult> Index(string searchString)
         {
-            var events = from e in _context.Events
-                         select e;
+            var events = _context.Events
+                .Include(e => e.EventType)
+                .AsQueryable();
 
             if (!string.IsNullOrEmpty(searchString))
             {
